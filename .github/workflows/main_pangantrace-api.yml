@@ -1,5 +1,4 @@
-# Docs for the Azure Web Apps Deploy action: https://github.com/Azure/webapps-deploy
-# More GitHub Actions for Azure: https://github.com/Azure/actions
+# Build and deploy Python app to Azure Web App - pangantrace-api
 
 name: Build and deploy Python app to Azure Web App - pangantrace-api
 
@@ -23,7 +22,7 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Create virtual environment and install dependencies
+      - name: Install dependencies
         run: |
           python -m venv antenv
           source antenv/bin/activate
@@ -34,11 +33,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: python-app
-          path: |
-            ./backend/
-            !./backend/antenv/
-            !./backend/ml/data/
-            !./backend/ml/notebooks/
+          path: backend/
 
   deploy:
     runs-on: ubuntu-latest
@@ -52,6 +47,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: python-app
+          path: release
 
       - name: Login to Azure
         uses: azure/login@v2
@@ -66,3 +62,4 @@ jobs:
         with:
           app-name: 'pangantrace-api'
           slot-name: 'Production'
+          package: release
