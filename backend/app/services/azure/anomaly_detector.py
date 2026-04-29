@@ -1,26 +1,17 @@
-from azure.ai.anomalydetector import AnomalyDetectorClient
-from azure.ai.anomalydetector.models import (
-    UnivariateDetectionOptions,
-    TimeSeriesPoint,
-    TimeGranularity,
-    ImputeMode,
-)
-from azure.core.credentials import AzureKeyCredential
+"""
+Anomaly detection service using local ML model.
+Replaces Azure Anomaly Detector with our custom-trained fraud model.
+"""
 from datetime import datetime
 from typing import List, Optional
-from app.core.config import get_settings
 import logging
+import numpy as np
 
 logger = logging.getLogger(__name__)
-settings = get_settings()
 
 
-class AzureAnomalyDetectorService:
-    def __init__(self):
-        self.client = AnomalyDetectorClient(
-            endpoint=settings.AZURE_ANOMALY_ENDPOINT,
-            credential=AzureKeyCredential(settings.AZURE_ANOMALY_KEY),
-        )
+class LocalAnomalyDetectorService:
+    """Uses statistical methods for anomaly detection (no Azure dependency)."""
 
     async def detect_price_anomalies(
         self,
@@ -28,44 +19,42 @@ class AzureAnomalyDetectorService:
         values: List[float],
         sensitivity: int = 85,
     ) -> dict:
-        """
-        Deteksi anomali harga komoditas menggunakan Azure Anomaly Detector.
-        Sensitivity 85 = cukup sensitif untuk fraud detection tanpa false positive berlebihan.
-        """
-        series = [
-            TimeSeriesPoint(timestamp=ts, value=val)
-            for ts, val in zip(timestamps, values)
+        """Detect price anomalies using rolling statistics."""
+        values_arr = np.array(values, dtype=float)
+
+        if len(values_arr) < 3:
+            return {
+                "is_anomaly": [False] * len(values_arr),
+                "anomaly_indices": [],
+                "expected_values": values,
+                "anomaly_count": 0,
+                "severity_scores": [0.0] * len(values_arr),
+            }
+
+        window = min(7, len(values_arr) - 1)
+        rolling_mean = np.convolve(values_arr, np.ones(window) / window, mode="same")
+        rolling_std = np.array([
+            np.std(values_arr[max(0, i - window):i + 1])
+            for i in range(len(values_arr))
+        ])
+        rolling_std = np.where(rolling_std == 0, 1, rolling_std)
+
+        threshold = (100 - sensitivity) / 100 * 3 + 1.5
+        z_scores = np.abs(values_arr - rolling_mean) / rolling_std
+        is_anomaly = z_scores > threshold
+
+        anomaly_indices = [i for i, v in enumerate(is_anomaly) if v]
+        severity_scores = [
+            min(float(z * 30), 100.0) for z in z_scores
         ]
 
-        request = UnivariateDetectionOptions(
-            series=series,
-            granularity=TimeGranularity.DAILY,
-            sensitivity=sensitivity,
-            impute_mode=ImputeMode.AUTO,
-        )
-
-        try:
-            response = self.client.detect_univariate_entire_series(request)
-            anomaly_indices = [
-                i for i, is_anomaly in enumerate(response.is_anomaly) if is_anomaly
-            ]
-            return {
-                "is_anomaly": response.is_anomaly,
-                "anomaly_indices": anomaly_indices,
-                "expected_values": response.expected_values,
-                "upper_margins": response.upper_margins,
-                "lower_margins": response.lower_margins,
-                "anomaly_count": len(anomaly_indices),
-                "severity_scores": self._calculate_severity(
-                    values,
-                    response.expected_values,
-                    response.upper_margins,
-                    response.lower_margins,
-                ),
-            }
-        except Exception as e:
-            logger.error(f"Azure Anomaly Detector error: {e}")
-            raise
+        return {
+            "is_anomaly": is_anomaly.tolist(),
+            "anomaly_indices": anomaly_indices,
+            "expected_values": rolling_mean.tolist(),
+            "anomaly_count": len(anomaly_indices),
+            "severity_scores": severity_scores,
+        }
 
     async def detect_volume_anomalies(
         self,
@@ -73,47 +62,22 @@ class AzureAnomalyDetectorService:
         volumes: List[float],
         commodity: str,
     ) -> dict:
-        """
-        Deteksi anomali volume distribusi — kunci untuk mendeteksi
-        kebocoran subsidi di layer distributor.
-        """
+        """Detect volume anomalies using rolling statistics."""
         result = await self.detect_price_anomalies(
             timestamps=timestamps,
             values=volumes,
-            sensitivity=90,  # Lebih sensitif untuk volume fraud
+            sensitivity=90,
         )
         result["commodity"] = commodity
         result["detection_type"] = "volume_fraud"
         return result
 
-    def _calculate_severity(
-        self,
-        actual: List[float],
-        expected: List[float],
-        upper: List[float],
-        lower: List[float],
-    ) -> List[Optional[float]]:
-        """
-        Hitung severity score 0-100 berdasarkan seberapa jauh nilai dari expected range.
-        """
-        scores = []
-        for a, e, u, l in zip(actual, expected, upper, lower):
-            if a > e:
-                margin = u if u and u > e else e * 0.1
-                deviation = (a - e) / max(margin, 0.001)
-            else:
-                margin = abs(l - e) if l and l < e else e * 0.1
-                deviation = (e - a) / max(margin, 0.001)
-            score = min(deviation * 50, 100)
-            scores.append(round(score, 2))
-        return scores
+
+_anomaly_service: Optional[LocalAnomalyDetectorService] = None
 
 
-_anomaly_service: Optional[AzureAnomalyDetectorService] = None
-
-
-def get_anomaly_service() -> AzureAnomalyDetectorService:
+def get_anomaly_service() -> LocalAnomalyDetectorService:
     global _anomaly_service
     if _anomaly_service is None:
-        _anomaly_service = AzureAnomalyDetectorService()
+        _anomaly_service = LocalAnomalyDetectorService()
     return _anomaly_service
