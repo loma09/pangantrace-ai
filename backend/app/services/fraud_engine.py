@@ -1,14 +1,13 @@
 from typing import List, Dict, Optional
 from datetime import datetime
 from app.services.azure.anomaly_detector import get_anomaly_service
-from app.services.azure.openai_client import get_openai_service
 import logging
 
 logger = logging.getLogger(__name__)
 
 FRAUD_THRESHOLDS = {
-    "price_spike_pct": 15.0,  # Lonjakan harga > 15% dalam 1 hari = suspicious
-    "volume_discrepancy_pct": 5.0,  # Selisih volume > 5% = potensi fraud
+    "price_spike_pct": 15.0,
+    "volume_discrepancy_pct": 5.0,
     "severity_high": 70.0,
     "severity_medium": 40.0,
 }
@@ -17,7 +16,18 @@ FRAUD_THRESHOLDS = {
 class FraudEngine:
     def __init__(self):
         self.anomaly_service = get_anomaly_service()
-        self.openai_service = get_openai_service()
+        self._openai_service = None
+
+    def _get_openai(self):
+        """Lazy-load OpenAI to avoid crash if not configured."""
+        if self._openai_service is None:
+            try:
+                from app.services.azure.openai_client import get_openai_service
+                self._openai_service = get_openai_service()
+            except Exception as e:
+                logger.warning(f"OpenAI service unavailable: {e}")
+                self._openai_service = None
+        return self._openai_service
 
     async def analyze_transaction_batch(
         self,
@@ -51,14 +61,28 @@ class FraudEngine:
 
         chain_data = self._analyze_chain_discrepancy(transactions)
 
+        # --- AI Insight (non-fatal) ---
         insight = None
         if risk_level in ("high", "critical"):
-            insight = await self.openai_service.generate_anomaly_insight(
-                commodity=commodity,
-                province=province,
-                anomaly_data=price_anomalies,
-                chain_data=chain_data,
-            )
+            openai = self._get_openai()
+            if openai:
+                try:
+                    insight_result = await openai.generate_anomaly_insight(
+                        commodity=commodity,
+                        province=province,
+                        anomaly_data=price_anomalies,
+                        chain_data=chain_data,
+                    )
+                    insight = insight_result.get("insight") if isinstance(insight_result, dict) else str(insight_result)
+                except Exception as e:
+                    logger.warning(f"AI insight generation failed: {e}")
+                    insight = self._generate_local_insight(
+                        commodity, province, price_anomalies, chain_data, fraud_score
+                    )
+            else:
+                insight = self._generate_local_insight(
+                    commodity, province, price_anomalies, chain_data, fraud_score
+                )
 
         return {
             "commodity": commodity,
@@ -79,6 +103,48 @@ class FraudEngine:
             "analyzed_at": datetime.now().isoformat(),
             "transaction_count": len(transactions),
         }
+
+    def _generate_local_insight(
+        self, commodity: str, province: str, price_data: Dict, chain_data: Dict, score: float
+    ) -> str:
+        """Generate meaningful insight locally when OpenAI is unavailable."""
+        anomaly_count = price_data.get("anomaly_count", 0)
+        severity_scores = price_data.get("severity_scores", [])
+        max_severity = max(severity_scores) if severity_scores else 0
+        disc_pct = chain_data.get("discrepancy_pct", 0)
+
+        parts = []
+        parts.append(
+            f"Terdeteksi {anomaly_count} titik anomali harga pada distribusi "
+            f"{commodity.replace('_', ' ')} di {province} dengan severity tertinggi "
+            f"{round(max_severity, 1)}/100."
+        )
+
+        if disc_pct > 10:
+            parts.append(
+                f"Discrepancy volume distribusi mencapai {round(disc_pct, 1)}%, "
+                f"mengindikasikan potensi kebocoran subsidi yang signifikan di layer distributor. "
+                f"Volume masuk ({chain_data.get('volume_in', 0)} ton) tidak sebanding dengan "
+                f"volume keluar ({chain_data.get('volume_out', 0)} ton)."
+            )
+        elif disc_pct > 5:
+            parts.append(
+                f"Selisih volume distribusi sebesar {round(disc_pct, 1)}% perlu diverifikasi. "
+                f"Kemungkinan terdapat penyusutan berlebihan di rantai pasok."
+            )
+
+        if score >= 80:
+            parts.append(
+                "REKOMENDASI: Segera lakukan audit fisik stok gudang distributor terkait "
+                "dan verifikasi silang dengan data pengiriman dari Bulog regional."
+            )
+        elif score >= 60:
+            parts.append(
+                "REKOMENDASI: Tingkatkan frekuensi monitoring pada titik distribusi "
+                "yang terdeteksi anomali dan minta laporan harian dari distributor."
+            )
+
+        return " ".join(parts)
 
     def _calculate_fraud_score(
         self,
