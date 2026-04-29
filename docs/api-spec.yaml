@@ -1,0 +1,269 @@
+openapi: "3.1.0"
+info:
+  title: PanganTrace AI API
+  description: |
+    REST API untuk platform monitoring rantai pasok pangan dan deteksi fraud.
+    Powered by Azure Anomaly Detector, Azure ML, dan Azure OpenAI.
+  version: "1.0.0"
+  contact:
+    name: PanganTrace AI Team
+
+servers:
+  - url: http://localhost:8000
+    description: Development
+  - url: https://api.pangantrace.ai
+    description: Production
+
+paths:
+  /api/v1/anomaly/detect:
+    post:
+      summary: Deteksi anomali harga
+      tags: [Anomaly]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [commodity, province, days]
+              properties:
+                commodity:
+                  type: string
+                  example: beras_premium
+                province:
+                  type: string
+                  example: Jawa Timur
+                days:
+                  type: integer
+                  example: 30
+                sensitivity:
+                  type: integer
+                  default: 85
+      responses:
+        "200":
+          description: Anomaly detection results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  anomalies:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AnomalyResult"
+                  total_anomalies:
+                    type: integer
+                  fraud_score:
+                    type: number
+
+  /api/v1/anomaly/summary:
+    get:
+      summary: Ringkasan anomali
+      tags: [Anomaly]
+      parameters:
+        - name: days
+          in: query
+          schema:
+            type: integer
+            default: 14
+      responses:
+        "200":
+          description: Summary metrics
+
+  /api/v1/prices/predict:
+    post:
+      summary: Prediksi harga 7 hari
+      tags: [Prices]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [commodity]
+              properties:
+                commodity:
+                  type: string
+                  example: beras_premium
+                province:
+                  type: string
+                  example: Jawa Timur
+      responses:
+        "200":
+          description: Price prediction with confidence intervals
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PricePrediction"
+
+  /api/v1/prices/current:
+    get:
+      summary: Harga komoditas terkini
+      tags: [Prices]
+      responses:
+        "200":
+          description: Current prices for all commodities
+
+  /api/v1/insights/generate:
+    post:
+      summary: Generate AI insight dari anomali
+      tags: [Insights]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                anomaly_data:
+                  type: object
+                commodity:
+                  type: string
+                province:
+                  type: string
+      responses:
+        "200":
+          description: AI-generated insight in Bahasa Indonesia
+
+  /api/v1/insights/daily-summary:
+    get:
+      summary: Ringkasan harian dari Azure OpenAI
+      tags: [Insights]
+      responses:
+        "200":
+          description: Daily summary narrative
+
+  /api/v1/chain/nodes:
+    get:
+      summary: Daftar node rantai pasok
+      tags: [Supply Chain]
+      parameters:
+        - name: province
+          in: query
+          schema:
+            type: string
+        - name: node_type
+          in: query
+          schema:
+            type: string
+            enum: [producer, distributor, retailer]
+      responses:
+        "200":
+          description: List of supply chain nodes
+
+  /api/v1/chain/flow/{commodity}:
+    get:
+      summary: Alur distribusi komoditas
+      tags: [Supply Chain]
+      parameters:
+        - name: commodity
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Distribution flow with volume tracking
+
+  /api/v1/alerts:
+    get:
+      summary: Daftar alert fraud
+      tags: [Alerts]
+      parameters:
+        - name: severity
+          in: query
+          schema:
+            type: string
+            enum: [low, medium, high, critical]
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [open, investigating, resolved]
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: List of fraud alerts
+
+  /api/v1/alerts/{alert_id}:
+    get:
+      summary: Detail alert
+      tags: [Alerts]
+      parameters:
+        - name: alert_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Alert detail with AI insight
+
+components:
+  schemas:
+    AnomalyResult:
+      type: object
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        is_anomaly:
+          type: boolean
+        expected_value:
+          type: number
+        actual_value:
+          type: number
+        severity:
+          type: number
+        deviation_pct:
+          type: number
+
+    PricePrediction:
+      type: object
+      properties:
+        commodity:
+          type: string
+        predictions:
+          type: array
+          items:
+            type: object
+            properties:
+              date:
+                type: string
+              predicted_price:
+                type: number
+              lower_bound:
+                type: number
+              upper_bound:
+                type: number
+              confidence:
+                type: number
+
+    Alert:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        province:
+          type: string
+        commodity:
+          type: string
+        severity:
+          type: string
+          enum: [low, medium, high, critical]
+        fraud_score:
+          type: number
+        status:
+          type: string
+          enum: [open, investigating, resolved]
+        detected_at:
+          type: string
+          format: date-time
+        azure_service:
+          type: string
