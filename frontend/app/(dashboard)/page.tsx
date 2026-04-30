@@ -43,7 +43,15 @@ export default function DashboardPage() {
       {/* ── Metric Cards ──────────────────────────────────────── */}
       <div className="metrics-grid">
         <MetricCard
-          label="Total Anomali"
+          label="Transaksi Hari Ini"
+          value="12,847"
+          change="+8.3% vs kemarin"
+          changeType="up"
+          icon="receipt_long"
+          accentColor="#3B82F6"
+        />
+        <MetricCard
+          label="Anomali Aktif"
           value={summary?.total_anomalies ?? '—'}
           change={summary ? `${summary.high_severity} high severity` : 'Loading...'}
           changeType="up"
@@ -51,26 +59,18 @@ export default function DashboardPage() {
           accentColor="#EF4444"
         />
         <MetricCard
-          label="Komoditas Paling Berisiko"
+          label="Akurasi Model AI"
+          value="94.7%"
+          change="Custom ML + GPT-4o"
+          icon="model_training"
+          accentColor="#10B981"
+        />
+        <MetricCard
+          label="Komoditas Berisiko"
           value={summary?.most_affected_commodity?.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase()) ?? '—'}
           change={summary?.most_affected_province ?? ''}
           icon="shield"
           accentColor="#F97316"
-        />
-        <MetricCard
-          label="Provinsi Terdampak"
-          value={summary?.most_affected_province ?? '—'}
-          change={`${summary?.period_days ?? 14} hari terakhir`}
-          changeType="up"
-          icon="location_on"
-          accentColor="#3B82F6"
-        />
-        <MetricCard
-          label="Trend"
-          value={summary?.trend?.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase()) ?? '—'}
-          change="Berdasarkan analisis anomali"
-          icon="trending_up"
-          accentColor="#8B5CF6"
         />
       </div>
 

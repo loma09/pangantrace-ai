@@ -13,6 +13,11 @@ const COMMODITIES = [
   { id: 'minyak_goreng', label: 'Minyak Goreng', price: 15000 },
 ]
 
+const PROVINCES = [
+  'Jawa Timur', 'Jawa Barat', 'Jawa Tengah', 'Sumatera Utara',
+  'Sulawesi Selatan', 'NTT', 'Bali', 'DKI Jakarta', 'Kalimantan Timur',
+]
+
 function generateHistorical(basePrice: number): { prices: number[], dates: string[] } {
   const prices: number[] = []
   const dates: string[] = []
@@ -30,6 +35,7 @@ function generateHistorical(basePrice: number): { prices: number[], dates: strin
 
 export default function PricePredictionPage() {
   const [selected, setSelected] = useState(COMMODITIES[0])
+  const [province, setProvince] = useState(PROVINCES[0])
   const [forecastDays, setForecastDays] = useState(7)
   const [isLoading, setIsLoading] = useState(false)
   const [result, setResult] = useState<any>(null)
@@ -112,7 +118,30 @@ export default function PricePredictionPage() {
           ))}
         </div>
 
-        <div style={{ display: 'flex', gap: 16, alignItems: 'end' }}>
+        <div style={{ display: 'flex', gap: 16, alignItems: 'end', flexWrap: 'wrap' }}>
+          <div>
+            <label style={{ display: 'block', fontSize: '0.78rem', color: 'var(--text-tertiary)', marginBottom: 6, fontWeight: 500 }}>
+              Provinsi
+            </label>
+            <select
+              value={province}
+              onChange={(e) => setProvince(e.target.value)}
+              style={{
+                padding: '10px 14px',
+                background: 'var(--bg-input)',
+                border: '1px solid var(--border-default)',
+                borderRadius: 'var(--radius-sm)',
+                color: 'var(--text-primary)',
+                fontSize: '0.88rem',
+                fontFamily: 'inherit',
+                cursor: 'pointer',
+                outline: 'none',
+                minWidth: 160,
+              }}
+            >
+              {PROVINCES.map(p => <option key={p} value={p}>{p}</option>)}
+            </select>
+          </div>
           <div>
             <label style={{ display: 'block', fontSize: '0.78rem', color: 'var(--text-tertiary)', marginBottom: 6, fontWeight: 500 }}>
               Horizon Prediksi
@@ -185,13 +214,13 @@ export default function PricePredictionPage() {
             <div className="card-header">
               <span className="card-title">
                 <span className="material-symbols-outlined">query_stats</span>
-                Hasil Prediksi — {selected.label}
+                Hasil Prediksi — {selected.label} ({province})
               </span>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                 <span className="live-badge">LIVE</span>
                 <span className="azure-badge">
                   <span className="material-symbols-outlined" style={{ fontSize: 12 }}>model_training</span>
-                  ML Model v{result.model_version || '1'}
+                  Azure ML
                 </span>
               </div>
             </div>
@@ -221,6 +250,46 @@ export default function PricePredictionPage() {
                 <div style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--accent-primary)' }}>{forecastDays} hari</div>
               </div>
             </div>
+
+            {/* Market Intervention Signal */}
+            {(() => {
+              const pct = Math.abs(result.trend_pct || 0)
+              const needsIntervention = pct > 5
+              const needsMonitor = pct > 2
+              const signal = needsIntervention ? 'INTERVENSI DIPERLUKAN' : needsMonitor ? 'MONITOR KETAT' : 'STABIL'
+              const signalColor = needsIntervention ? '#EF4444' : needsMonitor ? '#F59E0B' : '#10B981'
+              const signalIcon = needsIntervention ? 'gpp_bad' : needsMonitor ? 'visibility' : 'verified'
+              const signalDesc = needsIntervention
+                ? `Harga ${selected.label} diprediksi ${result.trend_pct > 0 ? 'naik' : 'turun'} ${pct}% dalam ${forecastDays} hari. Rekomendasi: lakukan intervensi pasar segera untuk stabilisasi harga di ${province}.`
+                : needsMonitor
+                  ? `Pergerakan harga ${selected.label} menunjukkan tren perubahan ${pct}%. Pantau pasar secara intensif di ${province}.`
+                  : `Harga ${selected.label} di ${province} diprediksi stabil dalam ${forecastDays} hari ke depan. Tidak diperlukan intervensi.`
+              return (
+                <div style={{
+                  padding: '16px 20px', marginBottom: 20,
+                  background: `${signalColor}10`,
+                  border: `1px solid ${signalColor}30`,
+                  borderRadius: 'var(--radius-md)',
+                  display: 'flex', alignItems: 'center', gap: 14,
+                }}>
+                  <div style={{
+                    width: 44, height: 44, borderRadius: 12,
+                    background: `${signalColor}20`,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                  }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: 24, color: signalColor }}>{signalIcon}</span>
+                  </div>
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: '0.88rem', color: signalColor, marginBottom: 4 }}>
+                      Sinyal Pasar: {signal}
+                    </div>
+                    <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+                      {signalDesc}
+                    </div>
+                  </div>
+                </div>
+              )
+            })()}
 
             {/* Forecast Table */}
             <table className="data-table">
