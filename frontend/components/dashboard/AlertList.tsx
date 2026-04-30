@@ -1,64 +1,7 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import type { Alert } from '@/types/anomaly'
-
-const DEMO_ALERTS: Alert[] = [
-  {
-    id: 'ALR-2026-0429-001',
-    title: 'Lonjakan harga beras premium 18.5% di Jawa Timur',
-    province: 'Jawa Timur',
-    commodity: 'beras_premium',
-    severity: 'high',
-    fraud_score: 78.5,
-    detected_at: '2026-04-29T08:30:00',
-    azure_service: 'Azure Anomaly Detector',
-    status: 'open',
-  },
-  {
-    id: 'ALR-2026-0429-002',
-    title: 'Discrepancy volume jagung 12.3% di Jawa Barat',
-    province: 'Jawa Barat',
-    commodity: 'jagung',
-    severity: 'critical',
-    fraud_score: 89.2,
-    detected_at: '2026-04-29T07:15:00',
-    azure_service: 'Azure Anomaly Detector',
-    status: 'investigating',
-  },
-  {
-    id: 'ALR-2026-0428-005',
-    title: 'Pola distribusi mencurigakan minyak goreng di Sumut',
-    province: 'Sumatera Utara',
-    commodity: 'minyak_goreng',
-    severity: 'medium',
-    fraud_score: 55.0,
-    detected_at: '2026-04-28T14:22:00',
-    azure_service: 'Azure OpenAI',
-    status: 'open',
-  },
-  {
-    id: 'ALR-2026-0428-003',
-    title: 'Anomali volume kedelai di gudang distributor Semarang',
-    province: 'Jawa Tengah',
-    commodity: 'kedelai',
-    severity: 'high',
-    fraud_score: 72.1,
-    detected_at: '2026-04-28T11:05:00',
-    azure_service: 'Azure Anomaly Detector',
-    status: 'open',
-  },
-  {
-    id: 'ALR-2026-0427-009',
-    title: 'Harga gula pasir naik abnormal 22% di NTT',
-    province: 'NTT',
-    commodity: 'gula_pasir',
-    severity: 'critical',
-    fraud_score: 91.4,
-    detected_at: '2026-04-27T16:48:00',
-    azure_service: 'Azure Anomaly Detector',
-    status: 'investigating',
-  },
-]
 
 function formatRelative(iso: string) {
   const diff = Date.now() - new Date(iso).getTime()
@@ -70,9 +13,45 @@ function formatRelative(iso: string) {
 }
 
 export default function AlertList() {
+  const [alerts, setAlerts] = useState<Alert[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? ''
+    if (!apiUrl) {
+      setLoading(false)
+      return
+    }
+    fetch(`${apiUrl}/api/v1/alerts/`)
+      .then(res => res.json())
+      .then(data => setAlerts(data.alerts || []))
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
+
+  if (loading) {
+    return (
+      <div className="alert-list">
+        {[1,2,3].map(i => (
+          <div key={i} className="alert-item" style={{ opacity: 0.4 }}>
+            <div className="skeleton" style={{ width: 4, height: 40 }} />
+            <div className="alert-content">
+              <div className="skeleton" style={{ width: '80%', height: 14, marginBottom: 8 }} />
+              <div className="skeleton" style={{ width: '50%', height: 10 }} />
+            </div>
+          </div>
+        ))}
+      </div>
+    )
+  }
+
+  if (alerts.length === 0) {
+    return <div style={{ color: 'var(--text-tertiary)', fontSize: '0.84rem', padding: 16 }}>Tidak ada alert</div>
+  }
+
   return (
     <div className="alert-list">
-      {DEMO_ALERTS.map((alert) => (
+      {alerts.map((alert) => (
         <div className="alert-item" key={alert.id} id={`alert-${alert.id}`}>
           <div className={`alert-severity-indicator ${alert.severity}`} />
           <div className="alert-content">

@@ -1,20 +1,38 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import MetricCard from '@/components/dashboard/MetricCard'
 import AlertList from '@/components/dashboard/AlertList'
 import ProvinceBarChart from '@/components/dashboard/BarChart'
 import AnomalyMap from '@/components/dashboard/AnomalyMap'
 
-const PRICE_TABLE = [
-  { commodity: 'Beras Premium', price: 'Rp 16.200', unit: '/kg', change: '+1.2%', trend: 'up' },
-  { commodity: 'Beras Medium',  price: 'Rp 13.100', unit: '/kg', change: '+0.8%', trend: 'up' },
-  { commodity: 'Jagung',        price: 'Rp 5.200',  unit: '/kg', change: '-0.5%', trend: 'down' },
-  { commodity: 'Kedelai',       price: 'Rp 9.800',  unit: '/kg', change: '+2.1%', trend: 'up' },
-  { commodity: 'Gula Pasir',    price: 'Rp 17.500', unit: '/kg', change: '-0.1%', trend: 'stable' },
-  { commodity: 'Minyak Goreng', price: 'Rp 15.000', unit: '/L',  change: '+0.3%', trend: 'up' },
-]
-
 export default function DashboardPage() {
+  const [prices, setPrices] = useState<Record<string, any>>({})
+  const [summary, setSummary] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? ''
+    if (!apiUrl) { setLoading(false); return }
+
+    Promise.all([
+      fetch(`${apiUrl}/api/v1/prices/current`).then(r => r.json()).catch(() => ({})),
+      fetch(`${apiUrl}/api/v1/anomaly/summary`).then(r => r.json()).catch(() => null),
+    ]).then(([priceData, summaryData]) => {
+      setPrices(priceData || {})
+      setSummary(summaryData)
+    }).finally(() => setLoading(false))
+  }, [])
+
+  const LABEL_MAP: Record<string, { label: string; unit: string }> = {
+    beras_premium:  { label: 'Beras Premium', unit: '/kg' },
+    beras_medium:   { label: 'Beras Medium',  unit: '/kg' },
+    jagung:         { label: 'Jagung',        unit: '/kg' },
+    kedelai:        { label: 'Kedelai',       unit: '/kg' },
+    gula_pasir:     { label: 'Gula Pasir',    unit: '/kg' },
+    minyak_goreng:  { label: 'Minyak Goreng', unit: '/L' },
+  }
+
   return (
     <>
       <div className="page-header">
@@ -26,32 +44,32 @@ export default function DashboardPage() {
       <div className="metrics-grid">
         <MetricCard
           label="Total Anomali"
-          value={47}
-          change="+12 vs minggu lalu"
+          value={summary?.total_anomalies ?? '—'}
+          change={summary ? `${summary.high_severity} high severity` : 'Loading...'}
           changeType="up"
           icon="warning"
           accentColor="#EF4444"
         />
         <MetricCard
-          label="Fraud Score Tertinggi"
-          value="91.4"
-          change="Gula pasir — NTT"
+          label="Komoditas Paling Berisiko"
+          value={summary?.most_affected_commodity?.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase()) ?? '—'}
+          change={summary?.most_affected_province ?? ''}
           icon="shield"
           accentColor="#F97316"
         />
         <MetricCard
-          label="Transaksi Hari Ini"
-          value="12,847"
-          change="+8.3% vs kemarin"
+          label="Provinsi Terdampak"
+          value={summary?.most_affected_province ?? '—'}
+          change={`${summary?.period_days ?? 14} hari terakhir`}
           changeType="up"
-          icon="receipt_long"
+          icon="location_on"
           accentColor="#3B82F6"
         />
         <MetricCard
-          label="Potensi Kerugian"
-          value="Rp 2.4M"
-          change="Estimasi subsidi bocor"
-          icon="money_off"
+          label="Trend"
+          value={summary?.trend?.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase()) ?? '—'}
+          change="Berdasarkan analisis anomali"
+          icon="trending_up"
           accentColor="#8B5CF6"
         />
       </div>
@@ -66,8 +84,8 @@ export default function DashboardPage() {
               Alert Terbaru
             </span>
             <span className="azure-badge">
-              <span className="material-symbols-outlined" style={{ fontSize: 12 }}>cloud</span>
-              Azure Anomaly Detector
+              <span className="material-symbols-outlined" style={{ fontSize: 12 }}>model_training</span>
+              ML Engine
             </span>
           </div>
           <AlertList />
@@ -99,7 +117,7 @@ export default function DashboardPage() {
           <AnomalyMap />
         </div>
 
-        {/* Price Table */}
+        {/* Price Table - from API */}
         <div className="card animate-in">
           <div className="card-header">
             <span className="card-title">
@@ -107,45 +125,54 @@ export default function DashboardPage() {
               Harga Komoditas Hari Ini
             </span>
             <span className="azure-badge">
-              <span className="material-symbols-outlined" style={{ fontSize: 12 }}>cloud</span>
-              Azure ML
+              <span className="material-symbols-outlined" style={{ fontSize: 12 }}>model_training</span>
+              ML Engine
             </span>
           </div>
-          <table className="data-table" id="price-table">
-            <thead>
-              <tr>
-                <th>Komoditas</th>
-                <th>Harga</th>
-                <th>Perubahan</th>
-              </tr>
-            </thead>
-            <tbody>
-              {PRICE_TABLE.map((row) => (
-                <tr key={row.commodity}>
-                  <td style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{row.commodity}</td>
-                  <td>
-                    {row.price}
-                    <span style={{ color: 'var(--text-tertiary)', fontSize: '0.75rem' }}>{row.unit}</span>
-                  </td>
-                  <td>
-                    <span
-                      style={{
-                        color:
-                          row.trend === 'up'
-                            ? 'var(--accent-emerald)'
-                            : row.trend === 'down'
-                              ? 'var(--accent-rose)'
-                              : 'var(--text-tertiary)',
-                        fontWeight: 600,
-                      }}
-                    >
-                      {row.change}
-                    </span>
-                  </td>
+          {loading ? (
+            <div style={{ padding: 16 }}>
+              {[1,2,3].map(i => <div key={i} className="skeleton" style={{ height: 20, marginBottom: 12, borderRadius: 4 }} />)}
+            </div>
+          ) : (
+            <table className="data-table" id="price-table">
+              <thead>
+                <tr>
+                  <th>Komoditas</th>
+                  <th>Harga</th>
+                  <th>Perubahan</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {Object.entries(prices).map(([key, val]: [string, any]) => {
+                  const info = LABEL_MAP[key] || { label: key, unit: '' }
+                  return (
+                    <tr key={key}>
+                      <td style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{info.label}</td>
+                      <td>
+                        Rp {val.price?.toLocaleString('id-ID')}
+                        <span style={{ color: 'var(--text-tertiary)', fontSize: '0.75rem' }}>{info.unit}</span>
+                      </td>
+                      <td>
+                        <span
+                          style={{
+                            color:
+                              val.trend === 'up'
+                                ? 'var(--accent-emerald)'
+                                : val.trend === 'down'
+                                  ? 'var(--accent-rose)'
+                                  : 'var(--text-tertiary)',
+                            fontWeight: 600,
+                          }}
+                        >
+                          {val.change_pct > 0 ? '+' : ''}{val.change_pct}%
+                        </span>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          )}
         </div>
       </div>
 
@@ -157,15 +184,15 @@ export default function DashboardPage() {
         </div>
         <div className="ai-insight-body">
           <p style={{ marginBottom: 12 }}>
-            Sistem PanganTrace AI mendeteksi <strong>47 anomali</strong> dalam 14 hari terakhir, dengan peningkatan
-            signifikan 34% dibanding periode sebelumnya. Jawa Timur menjadi provinsi dengan risiko tertinggi, terutama
-            pada komoditas beras premium yang mengalami lonjakan harga tidak wajar hingga 18.5% — jauh melebihi
-            fluktuasi musiman normal.
+            Sistem PanganTrace AI mendeteksi <strong>{summary?.total_anomalies ?? '—'} anomali</strong> dalam {summary?.period_days ?? 14} hari terakhir.
+            {summary?.most_affected_province && (
+              <> {summary.most_affected_province} menjadi provinsi dengan risiko tertinggi, terutama
+              pada komoditas {summary.most_affected_commodity?.replace(/_/g, ' ')} yang mengalami lonjakan harga tidak wajar.</>
+            )}
           </p>
           <p>
-            Potensi kebocoran subsidi diestimasi mencapai <strong>Rp 2.4 miliar</strong>, sebagian besar berasal dari
-            discrepancy volume distribusi di layer distributor. Rekomendasi: prioritaskan audit fisik pada 3 distributor
-            di Jawa Timur dan NTT yang menunjukkan selisih volume di atas 10%.
+            Rekomendasi: prioritaskan audit fisik pada distributor yang menunjukkan selisih volume di atas 10%
+            dan verifikasi silang dengan data pengiriman dari Bulog regional.
           </p>
         </div>
       </div>
