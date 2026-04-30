@@ -5,20 +5,66 @@ import RiskScoreBadge from '@/components/fraud/RiskScoreBadge'
 import AIExplanation from '@/components/fraud/AIExplanation'
 import AnomalyTable from '@/components/fraud/AnomalyTable'
 
-const SAMPLE_DATA = [
-  { timestamp: '2026-04-15T00:00:00', price: 16200, volume: 450, volume_in: 450, volume_out: 430 },
-  { timestamp: '2026-04-16T00:00:00', price: 16250, volume: 420, volume_in: 420, volume_out: 405 },
-  { timestamp: '2026-04-17T00:00:00', price: 16300, volume: 480, volume_in: 480, volume_out: 460 },
-  { timestamp: '2026-04-18T00:00:00', price: 16100, volume: 510, volume_in: 510, volume_out: 490 },
-  { timestamp: '2026-04-19T00:00:00', price: 16400, volume: 390, volume_in: 390, volume_out: 375 },
-  { timestamp: '2026-04-20T00:00:00', price: 16350, volume: 460, volume_in: 460, volume_out: 440 },
-  { timestamp: '2026-04-21T00:00:00', price: 19500, volume: 200, volume_in: 200, volume_out: 120 },
-  { timestamp: '2026-04-22T00:00:00', price: 21000, volume: 180, volume_in: 180, volume_out: 95 },
-  { timestamp: '2026-04-23T00:00:00', price: 20200, volume: 220, volume_in: 220, volume_out: 140 },
-  { timestamp: '2026-04-24T00:00:00', price: 18900, volume: 350, volume_in: 350, volume_out: 280 },
-  { timestamp: '2026-04-25T00:00:00', price: 17500, volume: 400, volume_in: 400, volume_out: 370 },
-  { timestamp: '2026-04-26T00:00:00', price: 16800, volume: 440, volume_in: 440, volume_out: 415 },
-]
+// Realistic base prices per commodity (Rp/kg)
+const COMMODITY_PROFILES: Record<string, { basePrice: number; baseVolume: number; spikeType: string; spikeFactor: number; leakPct: number }> = {
+  beras_premium:  { basePrice: 16200, baseVolume: 450, spikeType: 'price_spike',      spikeFactor: 1.29, leakPct: 0.40 },
+  beras_medium:   { basePrice: 13100, baseVolume: 520, spikeType: 'gradual_increase',  spikeFactor: 1.15, leakPct: 0.25 },
+  jagung:         { basePrice: 5200,  baseVolume: 380, spikeType: 'volume_drop',       spikeFactor: 1.08, leakPct: 0.55 },
+  kedelai:        { basePrice: 9800,  baseVolume: 290, spikeType: 'price_spike',       spikeFactor: 1.35, leakPct: 0.30 },
+  gula_pasir:     { basePrice: 17500, baseVolume: 410, spikeType: 'sustained_high',    spikeFactor: 1.22, leakPct: 0.45 },
+  minyak_goreng:  { basePrice: 15000, baseVolume: 470, spikeType: 'normal',            spikeFactor: 1.03, leakPct: 0.05 },
+}
+
+function generateSampleData(commodityId: string) {
+  const profile = COMMODITY_PROFILES[commodityId] || COMMODITY_PROFILES.beras_premium
+  const data = []
+  const today = new Date()
+
+  for (let i = 11; i >= 0; i--) {
+    const d = new Date(today)
+    d.setDate(d.getDate() - i)
+    const ts = d.toISOString().split('.')[0]
+
+    let price = profile.basePrice
+    let volume = profile.baseVolume
+    let volOut = volume * 0.96 // normal 4% loss
+
+    // Different fraud patterns per commodity
+    if (profile.spikeType === 'price_spike' && i >= 3 && i <= 5) {
+      // Sudden price spike + volume crash on days 7-9
+      price = Math.round(price * profile.spikeFactor)
+      volume = Math.round(volume * 0.45)
+      volOut = Math.round(volume * (1 - profile.leakPct))
+    } else if (profile.spikeType === 'gradual_increase') {
+      // Price slowly climbs
+      price = Math.round(price * (1 + (11 - i) * 0.012))
+      volOut = Math.round(volume * (1 - profile.leakPct * (i < 4 ? 1 : 0.1)))
+    } else if (profile.spikeType === 'volume_drop' && i >= 2 && i <= 6) {
+      // Volume drops dramatically, price barely moves
+      volume = Math.round(volume * 0.3)
+      volOut = Math.round(volume * (1 - profile.leakPct))
+      price = Math.round(price * (1 + 0.02))
+    } else if (profile.spikeType === 'sustained_high' && i >= 1 && i <= 7) {
+      // High prices for extended period
+      price = Math.round(price * profile.spikeFactor)
+      volOut = Math.round(volume * (1 - profile.leakPct))
+    } else {
+      // Normal fluctuation
+      price = Math.round(price + (Math.random() - 0.5) * price * 0.02)
+      volume = Math.round(volume + (Math.random() - 0.5) * 40)
+      volOut = Math.round(volume * (1 - profile.leakPct * 0.05))
+    }
+
+    data.push({
+      timestamp: ts,
+      price,
+      volume,
+      volume_in: volume,
+      volume_out: volOut,
+    })
+  }
+  return data
+}
 
 const COMMODITIES = ['beras_premium', 'beras_medium', 'jagung', 'kedelai', 'gula_pasir', 'minyak_goreng']
 const PROVINCES = ['Jawa Timur', 'Jawa Barat', 'Jawa Tengah', 'NTT', 'NTB', 'Sulawesi Selatan']
@@ -37,12 +83,14 @@ export default function FraudPage() {
 
     const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 
+    const sampleData = generateSampleData(commodity)
+
     try {
       const res = await fetch(`${apiUrl}/api/v1/anomaly/detect`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          transactions: SAMPLE_DATA,
+          transactions: sampleData,
           commodity,
           province,
         }),
@@ -160,17 +208,30 @@ export default function FraudPage() {
         </div>
 
         {/* Sample Data Preview */}
-        <div style={{ marginTop: 16, padding: '12px 16px', background: 'var(--bg-elevated)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)' }}>
-          <div style={{ fontSize: '0.72rem', color: 'var(--text-tertiary)', marginBottom: 6, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-            📊 Data Transaksi (12 data points)
-          </div>
-          <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', fontFamily: 'monospace', lineHeight: 1.6 }}>
-            Harga: {SAMPLE_DATA.map(d => `Rp${d.price.toLocaleString()}`).join(' → ')}
-          </div>
-          <div style={{ fontSize: '0.72rem', color: 'var(--accent-amber)', marginTop: 4 }}>
-            ⚠ Data mengandung lonjakan harga pada 21-23 Apr (spike +29%)
-          </div>
-        </div>
+        {(() => {
+          const preview = generateSampleData(commodity)
+          const profile = COMMODITY_PROFILES[commodity] || COMMODITY_PROFILES.beras_premium
+          const patternLabels: Record<string, string> = {
+            price_spike: `⚠ Lonjakan harga mendadak (+${Math.round((profile.spikeFactor - 1) * 100)}%) + volume crash`,
+            gradual_increase: '⚠ Kenaikan harga bertahap + kebocoran volume di distributor',
+            volume_drop: '⚠ Volume distribusi anjlok drastis (-70%) tanpa perubahan harga signifikan',
+            sustained_high: `⚠ Harga tinggi berkelanjutan (+${Math.round((profile.spikeFactor - 1) * 100)}%) selama 7 hari`,
+            normal: '✅ Pola distribusi normal — tidak ada anomali signifikan',
+          }
+          return (
+            <div style={{ marginTop: 16, padding: '12px 16px', background: 'var(--bg-elevated)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)' }}>
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-tertiary)', marginBottom: 6, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                📊 Data Transaksi — {commodity.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())} (12 data points)
+              </div>
+              <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', fontFamily: 'monospace', lineHeight: 1.6 }}>
+                Harga: {preview.map(d => `Rp${d.price.toLocaleString()}`).join(' → ')}
+              </div>
+              <div style={{ fontSize: '0.72rem', color: profile.spikeType === 'normal' ? 'var(--accent-emerald)' : 'var(--accent-amber)', marginTop: 4 }}>
+                {patternLabels[profile.spikeType] || '📊 Data simulasi'}
+              </div>
+            </div>
+          )
+        })()}
       </div>
 
       {/* Error */}
