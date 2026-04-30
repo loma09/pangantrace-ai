@@ -215,8 +215,8 @@ export default function ReportsPage() {
                 boxShadow: '0 2px 12px rgba(16, 185, 129, 0.3)',
               }}
             >
-              <span className="material-symbols-outlined" style={{ fontSize: 16 }}>download</span>
-              Download
+              <span className="material-symbols-outlined" style={{ fontSize: 16 }}>picture_as_pdf</span>
+              Download PDF
             </button>
           </div>
         )}
