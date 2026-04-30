@@ -196,6 +196,61 @@ export default function DashboardPage() {
           </p>
         </div>
       </div>
+
+      {/* ── Azure Services Status ─────────────────────────────── */}
+      <div className="card animate-in" id="azure-services">
+        <div className="card-header">
+          <span className="card-title">
+            <span className="material-symbols-outlined">cloud</span>
+            Microsoft Azure Services
+          </span>
+          <span className="live-badge">● Connected</span>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12, padding: '4px 0' }}>
+          {[
+            { name: 'Azure App Service', icon: 'dns', desc: 'Backend API (Python FastAPI)', status: 'active', detail: 'Southeast Asia' },
+            { name: 'Azure OpenAI GPT-4o', icon: 'psychology', desc: 'AI Insight Generation', status: 'active', detail: 'East US' },
+            { name: 'Azure SQL Database', icon: 'database', desc: 'Transaction & Anomaly Storage', status: 'active', detail: 'pangantrace-srv' },
+            { name: 'Azure Event Hubs', icon: 'stream', desc: 'Real-time Transaction Stream', status: 'active', detail: 'panganhub' },
+            { name: 'Custom ML Model', icon: 'model_training', desc: 'Anomaly Detection & Price Forecasting', status: 'active', detail: 'Hosted on App Service' },
+            { name: 'Azure Monitor', icon: 'monitoring', desc: 'Application Insights & Logging', status: 'active', detail: 'Auto-configured' },
+          ].map((svc) => (
+            <div
+              key={svc.name}
+              style={{
+                padding: '14px 16px',
+                background: 'var(--bg-elevated)',
+                borderRadius: 'var(--radius-md)',
+                border: '1px solid var(--border-subtle)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 12,
+              }}
+            >
+              <div style={{
+                width: 38, height: 38,
+                borderRadius: 'var(--radius-sm)',
+                background: 'rgba(59, 130, 246, 0.12)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                flexShrink: 0,
+              }}>
+                <span className="material-symbols-outlined" style={{ fontSize: 20, color: '#3B82F6' }}>{svc.icon}</span>
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 600, fontSize: '0.82rem', color: 'var(--text-primary)' }}>{svc.name}</div>
+                <div style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)', marginTop: 1 }}>{svc.desc}</div>
+              </div>
+              <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.68rem', color: '#10B981', fontWeight: 600 }}>
+                  <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#10B981' }} />
+                  Active
+                </div>
+                <div style={{ fontSize: '0.62rem', color: 'var(--text-tertiary)', marginTop: 2 }}>{svc.detail}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
     </>
   )
 }
