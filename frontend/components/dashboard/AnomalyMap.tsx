@@ -1,14 +1,26 @@
 'use client'
 
-const PROVINCE_MAP_DATA = [
-  { id: 'jawa-timur',   name: 'Jawa Timur',      anomalies: 14, risk: 'critical', x: 62, y: 75 },
-  { id: 'jawa-barat',   name: 'Jawa Barat',      anomalies: 11, risk: 'high',     x: 48, y: 72 },
-  { id: 'jawa-tengah',  name: 'Jawa Tengah',      anomalies: 8,  risk: 'high',     x: 55, y: 73 },
-  { id: 'sumatera-utara', name: 'Sumatera Utara', anomalies: 6,  risk: 'medium',   x: 28, y: 28 },
-  { id: 'sulawesi-selatan', name: 'Sulawesi Selatan', anomalies: 4, risk: 'medium', x: 72, y: 60 },
-  { id: 'ntt',          name: 'NTT',              anomalies: 3,  risk: 'medium',   x: 72, y: 82 },
-  { id: 'bali',         name: 'Bali',             anomalies: 1,  risk: 'low',      x: 66, y: 79 },
-]
+import { useState } from 'react'
+import {
+  ComposableMap,
+  Geographies,
+  Geography,
+  Marker,
+  ZoomableGroup,
+} from 'react-simple-maps'
+
+const INDONESIA_TOPO = 'https://raw.githubusercontent.com/superpikar/indonesia-geojson/master/indonesia.geojson'
+
+// Province anomaly data with real lat/lng
+const PROVINCE_DATA: Record<string, { anomalies: number; risk: string; lat: number; lng: number }> = {
+  'JAWA TIMUR':       { anomalies: 14, risk: 'critical', lat: -7.5361, lng: 112.2384 },
+  'JAWA BARAT':       { anomalies: 11, risk: 'high',     lat: -6.9147, lng: 107.6098 },
+  'JAWA TENGAH':      { anomalies: 8,  risk: 'high',     lat: -7.1510, lng: 110.1403 },
+  'SUMATERA UTARA':   { anomalies: 6,  risk: 'medium',   lat: 2.1154,  lng: 99.5451 },
+  'SULAWESI SELATAN':  { anomalies: 4,  risk: 'medium',   lat: -3.6688, lng: 119.9741 },
+  'NUSA TENGGARA TIMUR': { anomalies: 3, risk: 'medium',  lat: -8.6574, lng: 121.0794 },
+  'BALI':             { anomalies: 1,  risk: 'low',      lat: -8.4095, lng: 115.1889 },
+}
 
 function getRiskColor(risk: string) {
   switch (risk) {
@@ -19,75 +31,116 @@ function getRiskColor(risk: string) {
   }
 }
 
-export default function AnomalyMap() {
-  return (
-    <div style={{ position: 'relative', width: '100%', height: 280, background: 'var(--bg-elevated)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
-      {/* Simplified Indonesia map outline */}
-      <svg viewBox="0 0 100 100" width="100%" height="100%" style={{ position: 'absolute', inset: 0, opacity: 0.08 }}>
-        {/* Simplified archipelago outline */}
-        <path d="M15,35 Q20,28 30,30 Q35,25 40,30 Q45,28 50,32 L52,35 Q48,40 45,38 Q40,42 35,38 Q28,40 22,37 Z" fill="white"/>
-        <path d="M42,55 Q48,50 55,52 Q60,48 68,52 Q72,50 78,55 L80,60 Q75,65 70,62 Q65,68 58,64 Q52,68 45,62 Q40,65 38,58 Z" fill="white"/>
-        <path d="M45,68 Q50,65 58,68 Q62,65 68,70 Q72,68 78,72 L80,78 Q75,82 70,78 Q65,82 58,78 Q52,82 48,76 Z" fill="white"/>
-      </svg>
+function getProvinceRisk(name: string): { anomalies: number; risk: string } | null {
+  const upper = name.toUpperCase()
+  for (const [key, val] of Object.entries(PROVINCE_DATA)) {
+    if (upper.includes(key) || key.includes(upper)) return val
+  }
+  return null
+}
 
-      {/* Anomaly hotspots */}
-      {PROVINCE_MAP_DATA.map((prov) => {
-        const color = getRiskColor(prov.risk)
-        const size = Math.max(8, prov.anomalies * 1.5)
-        return (
-          <div
-            key={prov.id}
-            style={{
-              position: 'absolute',
-              left: `${prov.x}%`,
-              top: `${prov.y}%`,
-              transform: 'translate(-50%, -50%)',
-              cursor: 'pointer',
-            }}
-            title={`${prov.name}: ${prov.anomalies} anomali`}
-          >
-            {/* Pulse ring */}
-            <div
-              style={{
-                position: 'absolute',
-                inset: -size * 0.6,
-                borderRadius: '50%',
-                background: color,
-                opacity: 0.12,
-                animation: prov.risk === 'critical' ? 'pulse-dot 2s ease-in-out infinite' : 'none',
-              }}
-            />
-            {/* Dot */}
-            <div
-              style={{
-                width: size,
-                height: size,
-                borderRadius: '50%',
-                background: color,
-                boxShadow: `0 0 ${size}px ${color}`,
-                position: 'relative',
-                zIndex: 1,
-              }}
-            />
-            {/* Label */}
-            <div
-              style={{
-                position: 'absolute',
-                top: size + 4,
-                left: '50%',
-                transform: 'translateX(-50%)',
-                whiteSpace: 'nowrap',
-                fontSize: '0.6rem',
-                color: 'var(--text-tertiary)',
-                fontWeight: 500,
-                zIndex: 1,
-              }}
-            >
-              {prov.name}
-            </div>
+export default function AnomalyMap() {
+  const [tooltip, setTooltip] = useState<{ name: string; anomalies: number; risk: string } | null>(null)
+
+  return (
+    <div style={{ position: 'relative', width: '100%', height: 320, background: 'var(--bg-elevated)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
+      <ComposableMap
+        projection="geoMercator"
+        projectionConfig={{
+          center: [118, -2],
+          scale: 900,
+        }}
+        width={800}
+        height={400}
+        style={{ width: '100%', height: '100%' }}
+      >
+        <ZoomableGroup center={[118, -2]} zoom={1} minZoom={0.8} maxZoom={3}>
+          <Geographies geography={INDONESIA_TOPO}>
+            {({ geographies }) =>
+              geographies.map((geo) => {
+                const provName = geo.properties.state || geo.properties.name || geo.properties.NAME_1 || ''
+                const data = getProvinceRisk(provName)
+                const fillColor = data
+                  ? `${getRiskColor(data.risk)}30`
+                  : 'rgba(255,255,255,0.04)'
+                const strokeColor = data
+                  ? getRiskColor(data.risk)
+                  : 'rgba(255,255,255,0.12)'
+
+                return (
+                  <Geography
+                    key={geo.rsmKey}
+                    geography={geo}
+                    fill={fillColor}
+                    stroke={strokeColor}
+                    strokeWidth={0.5}
+                    style={{
+                      default: { outline: 'none' },
+                      hover: {
+                        fill: data ? `${getRiskColor(data.risk)}50` : 'rgba(255,255,255,0.08)',
+                        stroke: '#fff',
+                        strokeWidth: 1,
+                        outline: 'none',
+                        cursor: 'pointer',
+                      },
+                      pressed: { outline: 'none' },
+                    }}
+                    onMouseEnter={() => {
+                      if (data) setTooltip({ name: provName, ...data })
+                    }}
+                    onMouseLeave={() => setTooltip(null)}
+                  />
+                )
+              })
+            }
+          </Geographies>
+
+          {/* Anomaly markers */}
+          {Object.entries(PROVINCE_DATA).map(([name, data]) => (
+            <Marker key={name} coordinates={[data.lng, data.lat]}>
+              <circle
+                r={Math.max(3, data.anomalies * 0.7)}
+                fill={getRiskColor(data.risk)}
+                fillOpacity={0.7}
+                stroke={getRiskColor(data.risk)}
+                strokeWidth={1}
+                strokeOpacity={0.3}
+              />
+              {data.risk === 'critical' && (
+                <circle
+                  r={Math.max(3, data.anomalies * 0.7) + 4}
+                  fill="none"
+                  stroke={getRiskColor(data.risk)}
+                  strokeWidth={1}
+                  strokeOpacity={0.4}
+                  style={{ animation: 'pulse-dot 2s ease-in-out infinite' }}
+                />
+              )}
+            </Marker>
+          ))}
+        </ZoomableGroup>
+      </ComposableMap>
+
+      {/* Tooltip */}
+      {tooltip && (
+        <div style={{
+          position: 'absolute',
+          top: 12,
+          left: 12,
+          background: 'rgba(30, 40, 54, 0.95)',
+          border: '1px solid rgba(255,255,255,0.1)',
+          borderRadius: 'var(--radius-sm)',
+          padding: '8px 14px',
+          fontSize: '0.78rem',
+          backdropFilter: 'blur(8px)',
+          zIndex: 10,
+        }}>
+          <div style={{ fontWeight: 700, color: 'var(--text-primary)', marginBottom: 2 }}>{tooltip.name}</div>
+          <div style={{ color: getRiskColor(tooltip.risk) }}>
+            {tooltip.anomalies} anomali — <span style={{ textTransform: 'uppercase', fontWeight: 600, fontSize: '0.68rem' }}>{tooltip.risk}</span>
           </div>
-        )
-      })}
+        </div>
+      )}
 
       {/* Legend */}
       <div style={{ position: 'absolute', bottom: 12, right: 16, display: 'flex', gap: 12, fontSize: '0.65rem', color: 'var(--text-tertiary)' }}>
