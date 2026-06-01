@@ -1,7 +1,16 @@
-import { redirect } from 'next/navigation'
+@"
+'use client'
+import { useEffect } from 'react'
+import { useRouter } from 'next/navigation'
+import app from 'next/app'
+import page from '../page'
 
-// The (dashboard) route group maps to `/` which conflicts with the landing page.
-// Redirect to the first real dashboard page so the landing page owns `/`.
 export default function DashboardRootRedirect() {
-  redirect('/fraud')
+  const router = useRouter()
+  useEffect(() => {
+    router.replace('/fraud')
+  }, [router])
+
+  return null
 }
+"@ | Set-Content "frontend/app/(dashboard)/page.tsx"
