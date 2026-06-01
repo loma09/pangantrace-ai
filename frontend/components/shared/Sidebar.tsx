@@ -14,8 +14,7 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
   {
     title: 'Monitoring',
     items: [
-      { label: 'Dashboard', href: '/', icon: 'dashboard' },
-      { label: 'Fraud Detection', href: '/fraud', icon: 'shield', badge: '3' },
+      { label: 'Dashboard', href: '/fraud', icon: 'dashboard' },
       { label: 'Supply Chain', href: '/supply-chain', icon: 'hub' },
     ],
   },
