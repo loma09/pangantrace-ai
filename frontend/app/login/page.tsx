@@ -31,7 +31,7 @@ export default function LoginPage() {
         icon: user.icon,
         loginAt: new Date().toISOString(),
       }))
-      router.push('/fraud')
+      router.push('/dashboard')
     } else {
       setError('Email atau password salah')
     }
