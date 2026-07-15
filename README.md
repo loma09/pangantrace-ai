@@ -222,7 +222,6 @@ Dokumentasi lengkap: [/docs](https://pangantrace-api-v2.azurewebsites.net/docs)
 
 Dibangun untuk **Microsoft Elevate x Dicoding** — Hackathon.
 
-Dataset transaksi pangan dibuat secara sintetis oleh peserta berdasarkan pola harga komoditas BPS Indonesia.
 
 ---
 
